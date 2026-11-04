@@ -36,7 +36,7 @@ class PyroWaveRenderer
     native_agc_metrics_t hud_metrics_{};
     unsigned overlay_tick_ = 0;
     uint32_t last_key_ = UINT32_MAX;
-    int last_shift_ = -1;
+    uint32_t last_modifiers_ = UINT32_MAX;
     unsigned overlay_kind_ = 0;
     VkRenderPass pass_ = VK_NULL_HANDLE;
     VkPipeline pipeline_ = VK_NULL_HANDLE;

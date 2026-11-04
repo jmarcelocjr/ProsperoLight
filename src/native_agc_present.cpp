@@ -792,7 +792,7 @@ static uint8_t agc_initialized;
 static std::atomic<int> hud_enabled = 1;
 static std::atomic<int> keyboard_enabled = 0;
 static std::atomic<uint32_t> keyboard_selected = 0;
-static std::atomic<int> keyboard_shifted = 0;
+static std::atomic<uint32_t> keyboard_modifiers = 0;
 static std::atomic<uint32_t> keyboard_generation = 0;
 static std::atomic<uint32_t> requested_flip_mode = VIDEO_OUT_FLIP_MODE_VSYNC;
 static std::atomic<int> hsync_rejected = 0;
@@ -1213,17 +1213,17 @@ int native_agc_hud_enabled(void)
     return std::atomic_load_explicit(&hud_enabled, std::memory_order_relaxed);
 }
 
-void native_agc_keyboard_snapshot(int *enabled, uint32_t *selected, int *shifted)
+void native_agc_keyboard_snapshot(int *enabled, uint32_t *selected, uint32_t *modifiers)
 {
     *enabled = keyboard_enabled.load(std::memory_order_acquire);
     *selected = keyboard_selected.load(std::memory_order_relaxed);
-    *shifted = keyboard_shifted.load(std::memory_order_relaxed);
+    *modifiers = keyboard_modifiers.load(std::memory_order_relaxed);
 }
 
-void native_agc_set_keyboard_state(int enabled, uint32_t selected, int shifted)
+void native_agc_set_keyboard_state(int enabled, uint32_t selected, uint32_t modifiers)
 {
     std::atomic_store_explicit(&keyboard_selected, selected, std::memory_order_relaxed);
-    std::atomic_store_explicit(&keyboard_shifted, shifted != 0, std::memory_order_relaxed);
+    std::atomic_store_explicit(&keyboard_modifiers, modifiers, std::memory_order_relaxed);
     std::atomic_store_explicit(&keyboard_enabled, enabled != 0, std::memory_order_release);
     std::atomic_fetch_add_explicit(&keyboard_generation, 1u, std::memory_order_relaxed);
 }
@@ -1496,7 +1496,7 @@ static int present_frame(const void *source, size_t source_bytes, uint32_t pitch
             refresh_keyboard_surface(
                 presenter.shader_memory + HUD_SURFACE_OFFSET,
                 std::atomic_load_explicit(&keyboard_selected, std::memory_order_relaxed),
-                std::atomic_load_explicit(&keyboard_shifted, std::memory_order_relaxed), hdr);
+                std::atomic_load_explicit(&keyboard_modifiers, std::memory_order_relaxed), hdr);
             flush_gpu_data(presenter.shader_memory + HUD_SURFACE_OFFSET, KEYBOARD_SURFACE_BYTES);
             moonlight::record_performance_elapsed(agc_performance.overlay, overlay_started);
             presenter.keyboard_generation = generation;

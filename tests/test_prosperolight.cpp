@@ -616,22 +616,132 @@ TEST(PhysicalInput, ClampsNativeMouseRangesForMoonlightPackets)
 
 TEST(StreamKeyboard, NavigationWrapsAndPreservesAValidColumn)
 {
-    EXPECT_EQ(moonlight_keyboard_move(0, -1, 0), 12u);
-    EXPECT_EQ(moonlight_keyboard_move(12, 1, 0), 0u);
-    EXPECT_EQ(moonlight_keyboard_move(12, 0, 1), 25u);
-    EXPECT_EQ(moonlight_keyboard_move(51, 0, 1), 4u);
+    EXPECT_EQ(moonlight_keyboard_move(13, -1, 0), 25u);
+    EXPECT_EQ(moonlight_keyboard_move(25, 1, 0), 13u);
+    EXPECT_EQ(moonlight_keyboard_move(25, 0, 1), 38u);
+    EXPECT_EQ(moonlight_keyboard_move(38, 0, 1), 49u);
+    EXPECT_EQ(moonlight_keyboard_move(64, 0, 1), 4u);
+}
+
+TEST(StreamKeyboard, FunctionRowSitsAboveTheNumberRow)
+{
+    EXPECT_EQ(moonlight_keyboard_row(0), 0u);
+    EXPECT_EQ(moonlight_keyboard_row(12), 0u);
+    EXPECT_EQ(moonlight_keyboard_move(13, 0, -1), 0u);
+    EXPECT_EQ(moonlight_keyboard_move(0, 0, 1), 13u);
+    EXPECT_EQ(moonlight_keyboard_move(0, 0, -1), 60u);
+    EXPECT_EQ(moonlight_keyboard_move(69, 0, 1), 9u);
 }
 
 TEST(StreamKeyboard, ShiftedLabelsMatchTheSentVirtualKeys)
 {
-    EXPECT_STREQ(moonlight_keyboard_label(0, false), "1");
-    EXPECT_STREQ(moonlight_keyboard_label(0, true), "!");
-    EXPECT_STREQ(moonlight_keyboard_label(12, false), "`");
-    EXPECT_STREQ(moonlight_keyboard_label(12, true), "~");
-    EXPECT_STREQ(moonlight_keyboard_label(13, false), "q");
-    EXPECT_STREQ(moonlight_keyboard_label(13, true), "Q");
-    EXPECT_EQ(moonlight_keyboard_keys[13].virtual_key, 0x51u);
-    EXPECT_EQ(moonlight_keyboard_keys[47].action, moonlight_keyboard_action::shift);
+    EXPECT_STREQ(moonlight_keyboard_label(13, false), "1");
+    EXPECT_STREQ(moonlight_keyboard_label(13, true), "!");
+    EXPECT_STREQ(moonlight_keyboard_label(25, false), "`");
+    EXPECT_STREQ(moonlight_keyboard_label(25, true), "~");
+    EXPECT_STREQ(moonlight_keyboard_label(26, false), "q");
+    EXPECT_STREQ(moonlight_keyboard_label(26, true), "Q");
+    EXPECT_EQ(moonlight_keyboard_keys[26].virtual_key, 0x51u);
+    EXPECT_EQ(moonlight_keyboard_keys[60].action, moonlight_keyboard_action::shift);
+}
+
+TEST(StreamKeyboard, FunctionAndEditingKeysUseWindowsVirtualKeys)
+{
+    EXPECT_STREQ(moonlight_keyboard_keys[0].normal, "ESC");
+    EXPECT_EQ(moonlight_keyboard_keys[0].virtual_key, 0x1bu);
+    for (uint32_t number = 1; number <= 12; ++number)
+    {
+        const moonlight_keyboard_key &key = moonlight_keyboard_keys[number];
+        const std::string label = "F" + std::to_string(number);
+
+        EXPECT_EQ(label, key.normal);
+        EXPECT_EQ(label, key.shifted);
+        EXPECT_EQ(key.virtual_key, 0x6fu + number);
+        EXPECT_EQ(key.action, moonlight_keyboard_action::key);
+    }
+
+    const char *labels[] = {"SHIFT", "CTRL", "ALT",  "WIN",   "TAB",
+                            "SPACE", "DEL",  "BACK", "ENTER", "CLOSE"};
+    const moonlight_keyboard_action actions[] = {
+        moonlight_keyboard_action::shift, moonlight_keyboard_action::ctrl,
+        moonlight_keyboard_action::alt,   moonlight_keyboard_action::win,
+        moonlight_keyboard_action::key,   moonlight_keyboard_action::space,
+        moonlight_keyboard_action::key,   moonlight_keyboard_action::backspace,
+        moonlight_keyboard_action::enter, moonlight_keyboard_action::close,
+    };
+    for (uint32_t column = 0; column < 10; ++column)
+    {
+        EXPECT_STREQ(moonlight_keyboard_keys[60 + column].normal, labels[column]);
+        EXPECT_EQ(moonlight_keyboard_keys[60 + column].action, actions[column]);
+    }
+    EXPECT_EQ(moonlight_keyboard_keys[64].virtual_key, 0x09u);
+    EXPECT_EQ(moonlight_keyboard_keys[66].virtual_key, 0x2eu);
+}
+
+TEST(StreamKeyboard, ModifierBitsMatchMoonlightFlags)
+{
+    EXPECT_EQ(moonlight_keyboard_modifier_shift, 0x01);
+    EXPECT_EQ(moonlight_keyboard_modifier_ctrl, 0x02);
+    EXPECT_EQ(moonlight_keyboard_modifier_alt, 0x04);
+    EXPECT_EQ(moonlight_keyboard_modifier_win, 0x08);
+    EXPECT_EQ(moonlight_keyboard_modifier_for(moonlight_keyboard_action::ctrl),
+              moonlight_keyboard_modifier_ctrl);
+    EXPECT_EQ(moonlight_keyboard_modifier_for(moonlight_keyboard_action::key), 0);
+    EXPECT_EQ(moonlight_keyboard_one_shot_modifiers & moonlight_keyboard_modifier_shift, 0);
+}
+
+TEST(StreamKeyboard, PlainKeyIsAPressAndRelease)
+{
+    moonlight_keyboard_event events[moonlight_keyboard_max_events];
+
+    ASSERT_EQ(moonlight_keyboard_build_events(0x70, 0, events), 2u);
+    EXPECT_EQ(events[0].virtual_key, 0x70u);
+    EXPECT_TRUE(events[0].down);
+    EXPECT_EQ(events[1].virtual_key, 0x70u);
+    EXPECT_FALSE(events[1].down);
+    EXPECT_EQ(events[0].modifiers, 0);
+    EXPECT_EQ(events[1].modifiers, 0);
+
+    // SHIFT travels in the modifier flags, not as its own key press.
+    ASSERT_EQ(moonlight_keyboard_build_events(0x41, moonlight_keyboard_modifier_shift, events), 2u);
+    EXPECT_EQ(events[0].modifiers, moonlight_keyboard_modifier_shift);
+    EXPECT_EQ(events[1].modifiers, moonlight_keyboard_modifier_shift);
+}
+
+TEST(StreamKeyboard, ModifiersWrapTheKeyAndReleaseInReverse)
+{
+    moonlight_keyboard_event events[moonlight_keyboard_max_events];
+    const uint32_t count = moonlight_keyboard_build_events(0x2e,
+                                                           moonlight_keyboard_modifier_ctrl |
+                                                               moonlight_keyboard_modifier_alt |
+                                                               moonlight_keyboard_modifier_win,
+                                                           events);
+    // Each event reports the modifiers held once it lands, like a physical keyboard.
+    const moonlight_keyboard_event expected[] = {
+        {0xa2, true, 0x02},  {0xa4, true, 0x06},  {0x5b, true, 0x0e},  {0x2e, true, 0x0e},
+        {0x2e, false, 0x0e}, {0x5b, false, 0x06}, {0xa4, false, 0x02}, {0xa2, false, 0x00},
+    };
+
+    ASSERT_EQ(count, 8u);
+    for (uint32_t index = 0; index < count; ++index)
+    {
+        EXPECT_EQ(events[index].virtual_key, expected[index].virtual_key) << index;
+        EXPECT_EQ(events[index].down, expected[index].down) << index;
+        EXPECT_EQ(events[index].modifiers, expected[index].modifiers) << index;
+    }
+}
+
+TEST(StreamKeyboard, ShiftStaysHeldAcrossModifierReleases)
+{
+    moonlight_keyboard_event events[moonlight_keyboard_max_events];
+    const uint32_t count = moonlight_keyboard_build_events(
+        0x1b, moonlight_keyboard_modifier_shift | moonlight_keyboard_modifier_ctrl, events);
+
+    ASSERT_EQ(count, 4u);
+    EXPECT_EQ(events[0].modifiers, 0x03);
+    EXPECT_EQ(events[2].modifiers, 0x03);
+    EXPECT_EQ(events[3].virtual_key, 0xa2u);
+    EXPECT_EQ(events[3].modifiers, moonlight_keyboard_modifier_shift);
 }
 
 TEST(StreamKeyboard, CoversEveryPrintableUsAsciiPasswordCharacter)

@@ -85,7 +85,8 @@ int native_agc_finish_frame(void);
 void native_agc_output_status(uint32_t *width, uint32_t *height, uint32_t *refresh_x100);
 void native_agc_set_hud_enabled(int enabled);
 int native_agc_hud_enabled(void);
-void native_agc_set_keyboard_state(int enabled, uint32_t selected, int shifted);
+// modifiers is a moonlight_keyboard_modifier bitmask.
+void native_agc_set_keyboard_state(int enabled, uint32_t selected, uint32_t modifiers);
 void native_agc_set_tv_safe_area(int enabled);
 // V-Sync off flips at the next hsync (tearing). Applies to the next submission;
 // a rejected immediate flip falls back to V-Sync for the rest of the process.
@@ -105,7 +106,7 @@ void native_agc_note_initialized(void);
 // Codec-independent physical output status: -1 unknown, 0 SDR, 1 HDR.
 int native_videoout_hdr_active(int32_t handle);
 uint32_t native_videoout_refresh_x100(int32_t handle);
-void native_agc_keyboard_snapshot(int *enabled, uint32_t *selected, int *shifted);
+void native_agc_keyboard_snapshot(int *enabled, uint32_t *selected, uint32_t *modifiers);
 
 #endif
 

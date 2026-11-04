@@ -220,14 +220,14 @@ void PyroWaveRenderer::update_hud(const native_agc_metrics_t *metrics, bool enab
         return;
     if (metrics)
         hud_metrics_ = *metrics;
-    int keyboard = 0, shifted = 0;
-    uint32_t selected = 0;
-    native_agc_keyboard_snapshot(&keyboard, &selected, &shifted);
+    int keyboard = 0;
+    uint32_t selected = 0, modifiers = 0;
+    native_agc_keyboard_snapshot(&keyboard, &selected, &modifiers);
     const unsigned kind = keyboard ? 2u : enabled ? 1u : 0u;
     if (!kind && !overlay_kind_)
         return;
-    const bool changed =
-        kind != overlay_kind_ || (keyboard && (selected != last_key_ || shifted != last_shift_));
+    const bool changed = kind != overlay_kind_ ||
+                         (keyboard && (selected != last_key_ || modifiers != last_modifiers_));
     if (!changed && (!enabled || ++overlay_tick_ % 6u != 0))
         return;
     hud_mapped_[0] = keyboard ? KEYBOARD_WIDTH : HUD_WIDTH;
@@ -235,7 +235,7 @@ void PyroWaveRenderer::update_hud(const native_agc_metrics_t *metrics, bool enab
     hud_mapped_[2] = kind;
     auto *surface = reinterpret_cast<uint8_t *>(hud_mapped_ + 4);
     if (keyboard)
-        stream_overlay::refresh_keyboard_surface(surface, selected, shifted,
+        stream_overlay::refresh_keyboard_surface(surface, selected, modifiers,
                                                  conversion.blue_extent[3] > .5f);
     else if (enabled)
         stream_overlay::refresh_hud_surface(
@@ -243,7 +243,7 @@ void PyroWaveRenderer::update_hud(const native_agc_metrics_t *metrics, bool enab
             2160, hud_metrics_.output_refresh_x100, conversion.blue_extent[3] > .5f);
     overlay_kind_ = kind;
     last_key_ = selected;
-    last_shift_ = shifted;
+    last_modifiers_ = modifiers;
     if (!hud_coherent_)
     {
         VkMappedMemoryRange range = {VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};

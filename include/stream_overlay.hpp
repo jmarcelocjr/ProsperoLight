@@ -23,7 +23,7 @@
 #define HUD_UV_BYTES (HUD_WIDTH * (HUD_HEIGHT / 2u))
 #define HUD_SURFACE_BYTES (HUD_Y_BYTES + HUD_UV_BYTES)
 #define KEYBOARD_WIDTH 1120u
-#define KEYBOARD_HEIGHT 400u
+#define KEYBOARD_HEIGHT 448u
 #define KEYBOARD_Y 180u
 #define KEYBOARD_GLYPH_WIDTH 18u
 #define KEYBOARD_GLYPH_HEIGHT 18u
@@ -233,7 +233,8 @@ inline void overlay_fill_rect(uint8_t *luma, uint32_t width, uint32_t height, ui
         memset(luma + (size_t)(y + row) * width + x, value, rect_width);
 }
 
-inline void refresh_keyboard_surface(uint8_t *surface, uint32_t selected, int shifted, int hdr)
+inline void refresh_keyboard_surface(uint8_t *surface, uint32_t selected, uint32_t modifiers,
+                                     int hdr)
 {
     static const uint32_t margin = 18u;
     static const uint32_t gap = 8u;
@@ -241,6 +242,7 @@ inline void refresh_keyboard_surface(uint8_t *surface, uint32_t selected, int sh
     static const uint32_t first_row_y = 70u;
     uint8_t *luma = surface;
     uint8_t text_luma = hdr ? 143u : 245u;
+    bool shifted = (modifiers & moonlight_keyboard_modifier_shift) != 0;
 
     memset(luma, 44, KEYBOARD_Y_BYTES);
     memset(surface + KEYBOARD_Y_BYTES, 128, KEYBOARD_UV_BYTES);
@@ -264,12 +266,13 @@ inline void refresh_keyboard_surface(uint8_t *surface, uint32_t selected, int sh
         {
             uint32_t index = start + column;
             uint32_t x = row_x + column * (key_width + gap);
-            const char *label = moonlight_keyboard_label(index, shifted != 0);
+            const char *label = moonlight_keyboard_label(index, shifted);
             uint32_t label_width = (uint32_t)strlen(label) * KEYBOARD_GLYPH_WIDTH;
             uint8_t fill = index == selected ? (hdr ? 112u : 168u) : (hdr ? 60u : 72u);
 
-            if (moonlight_keyboard_keys[index].action == moonlight_keyboard_action::shift &&
-                shifted)
+            // An active modifier stays lit, but the cursor highlight wins so it never vanishes.
+            if (index != selected && (modifiers & moonlight_keyboard_modifier_for(
+                                                      moonlight_keyboard_keys[index].action)))
                 fill = hdr ? 92u : 136u;
             overlay_fill_rect(luma, KEYBOARD_WIDTH, KEYBOARD_HEIGHT, x, y, key_width, row_height,
                               fill);
