@@ -4495,8 +4495,8 @@ static int ps5_send_windows_key(uint16_t virtual_key, uint8_t modifiers)
     return result;
 }
 
-// Sends a key with the current modifiers, then clears CTRL, ALT and WIN.
-// SHIFT only changes printable keys, as it did before CTRL, ALT and WIN existed.
+// Sends a key with the current modifiers, then clears CTRL and ALT.
+// SHIFT only changes printable keys, as it did before CTRL and ALT existed.
 static int ps5_controller_send_keyboard_key(ps5_controller_state_t *state, uint16_t virtual_key,
                                             bool use_shift)
 {
@@ -4538,7 +4538,6 @@ static void ps5_controller_activate_keyboard_key(ps5_controller_state_t *state)
     case moonlight_keyboard_action::shift:
     case moonlight_keyboard_action::ctrl:
     case moonlight_keyboard_action::alt:
-    case moonlight_keyboard_action::win:
         state->keyboard_modifiers ^= moonlight_keyboard_modifier_for(key.action);
         break;
     case moonlight_keyboard_action::space:

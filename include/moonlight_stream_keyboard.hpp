@@ -20,7 +20,6 @@ enum class moonlight_keyboard_action : uint8_t
     close,
     ctrl,
     alt,
-    win,
 };
 
 // Bit values match moonlight-common-c's MODIFIER_SHIFT/CTRL/ALT/META flags.
@@ -29,13 +28,11 @@ enum moonlight_keyboard_modifier : uint8_t
     moonlight_keyboard_modifier_shift = 0x01,
     moonlight_keyboard_modifier_ctrl = 0x02,
     moonlight_keyboard_modifier_alt = 0x04,
-    moonlight_keyboard_modifier_win = 0x08,
 };
 
-// CTRL, ALT and WIN apply to the next key only; SHIFT stays until toggled off.
-inline constexpr uint8_t moonlight_keyboard_one_shot_modifiers = moonlight_keyboard_modifier_ctrl |
-                                                                 moonlight_keyboard_modifier_alt |
-                                                                 moonlight_keyboard_modifier_win;
+// CTRL and ALT apply to the next key only; SHIFT stays until toggled off.
+inline constexpr uint8_t moonlight_keyboard_one_shot_modifiers =
+    moonlight_keyboard_modifier_ctrl | moonlight_keyboard_modifier_alt;
 
 struct moonlight_keyboard_key
 {
@@ -114,7 +111,8 @@ inline constexpr moonlight_keyboard_key moonlight_keyboard_keys[] = {
     {"SHIFT", "SHIFT", 0, moonlight_keyboard_action::shift},
     {"CTRL", "CTRL", 0xa2, moonlight_keyboard_action::ctrl},
     {"ALT", "ALT", 0xa4, moonlight_keyboard_action::alt},
-    {"WIN", "WIN", 0x5b, moonlight_keyboard_action::win},
+    // WIN is a key of its own: a tap opens the Start menu.
+    {"WIN", "WIN", 0x5b, moonlight_keyboard_action::key},
     {"TAB", "TAB", 0x09, moonlight_keyboard_action::key},
     {"SPACE", "SPACE", 0x20, moonlight_keyboard_action::space},
     {"DEL", "DEL", 0x2e, moonlight_keyboard_action::key},
@@ -177,8 +175,6 @@ inline uint8_t moonlight_keyboard_modifier_for(moonlight_keyboard_action action)
         return moonlight_keyboard_modifier_ctrl;
     case moonlight_keyboard_action::alt:
         return moonlight_keyboard_modifier_alt;
-    case moonlight_keyboard_action::win:
-        return moonlight_keyboard_modifier_win;
     default:
         return 0;
     }
@@ -192,10 +188,10 @@ struct moonlight_keyboard_event
     uint8_t modifiers;
 };
 
-// Longest sequence: three modifier downs, key down, key up, three modifier ups.
-inline constexpr uint32_t moonlight_keyboard_max_events = 8;
+// Longest sequence: two modifier downs, key down, key up, two modifier ups.
+inline constexpr uint32_t moonlight_keyboard_max_events = 6;
 
-// CTRL, ALT and WIN are sent as real key presses around the key, since many
+// CTRL and ALT are sent as real key presses around the key, since many
 // Windows shortcuts only see the key state. SHIFT travels in the modifier flags.
 inline uint32_t moonlight_keyboard_build_events(uint16_t virtual_key, uint8_t modifiers,
                                                 moonlight_keyboard_event *out)
@@ -207,7 +203,6 @@ inline uint32_t moonlight_keyboard_build_events(uint16_t virtual_key, uint8_t mo
     } held[] = {
         {moonlight_keyboard_modifier_ctrl, 0xa2},
         {moonlight_keyboard_modifier_alt, 0xa4},
-        {moonlight_keyboard_modifier_win, 0x5b},
     };
     uint32_t count = 0;
     uint8_t active = modifiers & moonlight_keyboard_modifier_shift;
