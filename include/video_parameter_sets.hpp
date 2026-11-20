@@ -25,6 +25,11 @@ inline bool parameter_ids(Codec codec, const uint8_t *p, size_t n, bool picture,
         else
             continue;
         const unsigned header = codec == Codec::H264 ? 1 : 2;
+        // moonlight-common-c passes each packet after an access unit's first as
+        // its own fragment, so a slice can start in the last bytes of one and
+        // continue in the next: that cut-off start is a continuation, not invalid.
+        if (picture && start + header >= limit)
+            return false;
         if (start + header >= limit || (p[start] & 128))
         {
             if (found)
@@ -36,11 +41,12 @@ inline bool parameter_ids(Codec codec, const uint8_t *p, size_t n, bool picture,
                                     : type == (codec == Codec::H264 ? 8u : 34u);
         if (!wanted)
             continue;
+        const size_t window = std::min<size_t>(128, limit - start - header);
         if (found)
             *found = true;
         if (idr)
             *idr = codec == Codec::H264 ? type == 5 : type == 19 || type == 20;
-        Bits b(p + start + header, std::min<size_t>(128, limit - start - header));
+        Bits b(p + start + header, window, true);
         if (picture)
         {
             if (codec == Codec::H264)
@@ -57,6 +63,9 @@ inline bool parameter_ids(Codec codec, const uint8_t *p, size_t n, bool picture,
                     b.read(1);
             }
             id = b.ue(codec == Codec::H264 ? 255 : 63);
+            // The same cut can leave too few bytes for the slice header prefix.
+            if (!b.ok && window < 128 && found)
+                *found = false;
         }
         else
         {

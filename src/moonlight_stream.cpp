@@ -78,6 +78,8 @@
 #define PIPELINE_CLEAN_OUTPUTS 600u
 #define PRESENT_FAILURE_LIMIT 3u
 #define CATCHUP_HOLD_US UINT64_C(250000)
+// A mandatory keyframe wait asks the host again this often until the deadline.
+#define KEYFRAME_RETRY_US UINT64_C(1000000)
 #define MOONLIGHT_IDENTITY_DIRECTORY (storage::paths().pairing)
 #define CONTROLLER_KEEPALIVE_US UINT64_C(1000000)
 #define CONNECTION_SETUP_TIMEOUT_US UINT64_C(20000000)
@@ -638,6 +640,8 @@ typedef struct native_renderer_state
     moonlight::video::ParameterSets parameter_sets;
     uint64_t transition_wait_since;
     uint64_t parameter_transition_waits;
+    uint64_t keyframe_retry_us{};
+    uint32_t keyframe_retries{};
     moonlight::video::PipelineSampler pipeline_sampler;
     moonlight::video::RuntimePolicy stream_policy;
     bool policy_keyframe_wait{};
@@ -1022,8 +1026,10 @@ static void save_performance_summary(const native_renderer_state_t &state,
                        "presented_before\":%u,\n",
                        state.test_capacity_decoded_before, state.test_capacity_presented_before);
     ok = ok && report_append(report, sizeof(report), &length,
-                             "\"decoder_parameter_transition_waits\":%llu,\n",
-                             (unsigned long long)state.parameter_transition_waits);
+                             "\"decoder_parameter_transition_waits\":%llu,"
+                             "\"decoder_keyframe_retries\":%u,\n",
+                             (unsigned long long)state.parameter_transition_waits,
+                             state.keyframe_retries);
     const auto &window = state.pipeline_sampler.last;
     const auto &features = state.active_pps_features;
     ok = ok &&
@@ -1999,8 +2005,10 @@ static void lifecycle_failure(native_renderer_state_t *state, moonlight::video::
     state->last_result = code;
     state->running = 0;
     char line[192];
-    snprintf(line, sizeof(line), "Native decoder failed: reason=%u code=%08x generation=%u",
-             unsigned(reason), uint32_t(code), state->lifecycle.generation);
+    snprintf(line, sizeof(line),
+             "Native decoder failed: reason=%u code=%08x generation=%u keyframe_retries=%u",
+             unsigned(reason), uint32_t(code), state->lifecycle.generation,
+             state->keyframe_retries);
     (void)lan_http_report_text(line);
     fail_stream(code);
 }
@@ -2273,20 +2281,35 @@ static bool prepare_stream_decoder(native_renderer_state_t *state, PDECODE_UNIT 
     }
     const Requirements *selected = nullptr;
     bool safe_idr = true, unknown = false;
+    // The first fragment that made the unit unknown, for the rejection log.
+    unsigned fragment = 0, unknown_fragment = 0, unknown_pps = 256;
+    int unknown_length = 0;
     for (auto *entry = unit->bufferList; entry; entry = entry->next)
         if (entry->bufferType == BUFFER_TYPE_PICDATA)
         {
+            ++fragment;
             uint32_t id{}, unused{};
             bool idr = false, found = false;
             if (!parameter_ids(codec, reinterpret_cast<const uint8_t *>(entry->data), entry->length,
                                true, id, unused, &idr, &found, &sets.picture_type))
             {
+                if (found && !unknown)
+                {
+                    unknown_fragment = fragment;
+                    unknown_length = entry->length;
+                }
                 unknown |= found;
                 continue;
             } // Continuation fragments have no Annex-B slice header.
             safe_idr &= idr;
             if (!sets.pps_valid[id])
             {
+                if (!unknown)
+                {
+                    unknown_fragment = fragment;
+                    unknown_length = entry->length;
+                    unknown_pps = id;
+                }
                 unknown = true;
                 continue;
             }
@@ -2348,6 +2371,22 @@ static bool prepare_stream_decoder(native_renderer_state_t *state, PDECODE_UNIT 
                 state->stream_policy.reject();
             state->policy_keyframe_wait = false;
             state->transition_wait_since = 0;
+        }
+        // Rejected units leave no trace otherwise: record what made the first
+        // one of a wait, and every keyframe the host offered, unusable.
+        if (!state->transition_wait_since || unit->frameType == FRAME_TYPE_IDR)
+        {
+            char line[288];
+            snprintf(line, sizeof(line),
+                     "Native decoder rejected AU: frame=%d type=%d selected=%u unknown=%u "
+                     "conflict=%u safe_idr=%u sps=%u pps=%u activation=%u reset=%u await=%u "
+                     "unknown_fragment=%u/%u unknown_length=%d unknown_pps=%u",
+                     unit->frameNumber, unit->frameType, selected ? 1u : 0u, unsigned(unknown),
+                     unsigned(conflict), unsigned(safe_idr), unsigned(sets.supplied_sps),
+                     unsigned(sets.supplied_pps), unsigned(activation),
+                     unsigned(state->decoder_needs_reset), unsigned(state->await_keyframe),
+                     unknown_fragment, fragment, unknown_length, unknown_pps);
+            (void)lan_http_report_text(line);
         }
         if (!state->transition_wait_since)
         {
@@ -2444,6 +2483,25 @@ static bool decoder_deadline(native_renderer_state_t *state, uint64_t now)
     {
         lifecycle_failure(state, moonlight::video::Error::Parameters, -32);
         return false;
+    }
+    // The host can leave a recovery IDR request unanswered (seen with Sunshine
+    // on hardware), and moonlight-common-c asks only once. Without a usable
+    // keyframe the session would wait out the whole deadline, so ask again.
+    const uint64_t waiting_since =
+        state->transition_wait_since ? state->transition_wait_since
+        : state->lifecycle.state == moonlight::video::State::WaitingParameters
+            ? state->lifecycle.waiting_since
+            : 0;
+    if (waiting_since && !state->policy_keyframe_wait && state->running && now >= waiting_since &&
+        now - std::max(waiting_since, state->keyframe_retry_us) >= KEYFRAME_RETRY_US)
+    {
+        state->keyframe_retry_us = now;
+        ++state->keyframe_retries;
+        char line[128];
+        snprintf(line, sizeof(line), "Native decoder keyframe retry: n=%u waited_ms=%llu",
+                 state->keyframe_retries, (unsigned long long)((now - waiting_since) / 1000u));
+        (void)lan_http_report_text(line);
+        LiRequestIdrFrame();
     }
     return state->running;
 }

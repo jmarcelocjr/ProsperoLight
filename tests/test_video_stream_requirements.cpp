@@ -113,6 +113,47 @@ int main()
         bool idr = false;
         assert(parameter_ids(codec, picture.data(), picture.size(), true, id, parent, &idr) && idr);
         assert(!parameter_ids(codec, picture.data() + 4, picture.size() - 4, true, id, parent));
+        // Only a bounded prefix of a slice is read, and it can end right after
+        // an emulation-prevention byte (seen in HEVC keyframes of a still desktop).
+        {
+            const unsigned header = codec == Codec::H264 ? 1 : 2;
+            std::vector<uint8_t> escaped{0, 0, 0, 1};
+            if (codec == Codec::H264)
+                escaped.insert(escaped.end(), {0x65, 0xb2});
+            else
+                escaped.insert(escaped.end(), {0x26, 0x01, 0x88});
+            while (escaped.size() < 4 + header + 125)
+                escaped.push_back(0x40);
+            escaped.insert(escaped.end(), {0, 0, 3, 1});
+            escaped.resize(escaped.size() + 64, 0x40);
+            bool escaped_idr = false;
+            assert(parameter_ids(codec, escaped.data(), escaped.size(), true, id, parent,
+                                 &escaped_idr) &&
+                   id == 3 && escaped_idr);
+        }
+        // Each packet after an access unit's first is its own fragment, so a slice
+        // can start at the end of one: a continuation, not an unknown slice.
+        {
+            const std::vector<uint8_t> nal =
+                codec == Codec::H264 ? std::vector<uint8_t>{0, 0, 1, 0x65, 0xb2, 0x40}
+                                     : std::vector<uint8_t>{0, 0, 1, 0x26, 0x01, 0x88, 0x40};
+            for (size_t cut = 4; cut < nal.size() - 1; ++cut)
+            {
+                std::vector<uint8_t> tail(32, 0x40);
+                tail.insert(tail.end(), nal.begin(), nal.begin() + cut);
+                bool found = false;
+                assert(!parameter_ids(codec, tail.data(), tail.size(), true, id, parent, nullptr,
+                                      &found) &&
+                       !found);
+            }
+            // A slice that is complete in view and still malformed stays unknown.
+            std::vector<uint8_t> forbidden(32, 0x40);
+            forbidden.insert(forbidden.end(), {0, 0, 1, 0xe5, 0xb2, 0x40, 0x40});
+            bool found = false;
+            assert(!parameter_ids(codec, forbidden.data(), forbidden.size(), true, id, parent,
+                                  nullptr, &found) &&
+                   found);
+        }
         ParameterSets sets;
         auto r = parsed(codec, codec == Codec::H264 ? h264(1920, 1080, 1, 42, true, 2, 1)
                                                     : hevc(1920, 1080, 8, 2));
