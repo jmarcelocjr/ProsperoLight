@@ -2281,20 +2281,35 @@ static bool prepare_stream_decoder(native_renderer_state_t *state, PDECODE_UNIT 
     }
     const Requirements *selected = nullptr;
     bool safe_idr = true, unknown = false;
+    // The first fragment that made the unit unknown, for the rejection log.
+    unsigned fragment = 0, unknown_fragment = 0, unknown_pps = 256;
+    int unknown_length = 0;
     for (auto *entry = unit->bufferList; entry; entry = entry->next)
         if (entry->bufferType == BUFFER_TYPE_PICDATA)
         {
+            ++fragment;
             uint32_t id{}, unused{};
             bool idr = false, found = false;
             if (!parameter_ids(codec, reinterpret_cast<const uint8_t *>(entry->data), entry->length,
                                true, id, unused, &idr, &found, &sets.picture_type))
             {
+                if (found && !unknown)
+                {
+                    unknown_fragment = fragment;
+                    unknown_length = entry->length;
+                }
                 unknown |= found;
                 continue;
             } // Continuation fragments have no Annex-B slice header.
             safe_idr &= idr;
             if (!sets.pps_valid[id])
             {
+                if (!unknown)
+                {
+                    unknown_fragment = fragment;
+                    unknown_length = entry->length;
+                    unknown_pps = id;
+                }
                 unknown = true;
                 continue;
             }
@@ -2361,14 +2376,16 @@ static bool prepare_stream_decoder(native_renderer_state_t *state, PDECODE_UNIT 
         // one of a wait, and every keyframe the host offered, unusable.
         if (!state->transition_wait_since || unit->frameType == FRAME_TYPE_IDR)
         {
-            char line[224];
+            char line[288];
             snprintf(line, sizeof(line),
                      "Native decoder rejected AU: frame=%d type=%d selected=%u unknown=%u "
-                     "conflict=%u safe_idr=%u sps=%u pps=%u activation=%u reset=%u await=%u",
+                     "conflict=%u safe_idr=%u sps=%u pps=%u activation=%u reset=%u await=%u "
+                     "unknown_fragment=%u/%u unknown_length=%d unknown_pps=%u",
                      unit->frameNumber, unit->frameType, selected ? 1u : 0u, unsigned(unknown),
                      unsigned(conflict), unsigned(safe_idr), unsigned(sets.supplied_sps),
                      unsigned(sets.supplied_pps), unsigned(activation),
-                     unsigned(state->decoder_needs_reset), unsigned(state->await_keyframe));
+                     unsigned(state->decoder_needs_reset), unsigned(state->await_keyframe),
+                     unknown_fragment, fragment, unknown_length, unknown_pps);
             (void)lan_http_report_text(line);
         }
         if (!state->transition_wait_since)

@@ -131,6 +131,29 @@ int main()
                                  &escaped_idr) &&
                    id == 3 && escaped_idr);
         }
+        // Each packet after an access unit's first is its own fragment, so a slice
+        // can start at the end of one: a continuation, not an unknown slice.
+        {
+            const std::vector<uint8_t> nal =
+                codec == Codec::H264 ? std::vector<uint8_t>{0, 0, 1, 0x65, 0xb2, 0x40}
+                                     : std::vector<uint8_t>{0, 0, 1, 0x26, 0x01, 0x88, 0x40};
+            for (size_t cut = 4; cut < nal.size() - 1; ++cut)
+            {
+                std::vector<uint8_t> tail(32, 0x40);
+                tail.insert(tail.end(), nal.begin(), nal.begin() + cut);
+                bool found = false;
+                assert(!parameter_ids(codec, tail.data(), tail.size(), true, id, parent, nullptr,
+                                      &found) &&
+                       !found);
+            }
+            // A slice that is complete in view and still malformed stays unknown.
+            std::vector<uint8_t> forbidden(32, 0x40);
+            forbidden.insert(forbidden.end(), {0, 0, 1, 0xe5, 0xb2, 0x40, 0x40});
+            bool found = false;
+            assert(!parameter_ids(codec, forbidden.data(), forbidden.size(), true, id, parent,
+                                  nullptr, &found) &&
+                   found);
+        }
         ParameterSets sets;
         auto r = parsed(codec, codec == Codec::H264 ? h264(1920, 1080, 1, 42, true, 2, 1)
                                                     : hevc(1920, 1080, 8, 2));
