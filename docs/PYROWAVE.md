@@ -29,8 +29,8 @@ nine-entry VideoDec2 configuration table. No PyroWave VideoDec2 mode is fabricat
 
 ## Protocol and dependencies
 
-The single moonlight-common-c submodule stays at ProsperoLight's original upstream
-`f900dd4767759c7b9d0e93bcea666b55c69ea62f`. Build scripts apply the reviewable patch
+The single moonlight-common-c submodule stays at upstream
+`94c65fd364d17b223f00a8763c9a5d94a66cb8dd`. Build scripts apply the reviewable patch
 in `tools/pyrowave/patches/moonlight/`. It carries Nonary's independent-frame
 negotiation, depacketization, record-start/lost-packet markers, critical-packet
 metadata and partial-frame timeout/recovery. References: Nonary

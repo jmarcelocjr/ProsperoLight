@@ -198,7 +198,7 @@ extern "C"
         sent.push_back({true, number, mask, 0});
         return 0;
     }
-    int LiSendMultiControllerEvent(short number, short mask, int buttons, unsigned char,
+    int LiSendMultiControllerEvent(uint8_t number, uint16_t mask, int buttons, unsigned char,
                                    unsigned char, short, short, short, short)
     {
         sent.push_back({false, number, mask, buttons});

@@ -3867,10 +3867,7 @@ failed:
 
 static void ps5_audio_cleanup(void)
 {
-    const RTP_AUDIO_STATS *rtp = LiGetRTPAudioStats();
-
-    if (rtp)
-        audio_state.rtp = *rtp;
+    LiGetRTPAudioStats(&audio_state.rtp);
     if (audio_state.handle > 0)
     {
         audio_state.drain_result = sceAudioOutOutput(audio_state.handle, NULL);
