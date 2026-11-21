@@ -117,7 +117,7 @@ GetPortState; no proprietary headers, kernel modifications or extra import stubs
 
 ## Protocol provenance
 
-The original moonlight-common-c revision remains `f900dd4`. A small, repeatable
+The moonlight-common-c revision is upstream `94c65fd`. A small, repeatable
 haptics-only extension is applied by `tools/controllers/apply-haptics.sh` before
 building the streaming library and analyzing headers. Its named anchors allow
 composition with independent codec patches without replacing the submodule.

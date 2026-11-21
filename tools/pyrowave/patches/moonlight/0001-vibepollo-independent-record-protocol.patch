@@ -1,5 +1,5 @@
 diff --git a/src/Limelight.h b/src/Limelight.h
-index 22bee46..2f2c1c7 100644
+index 552d54a..d5edb26 100644
 --- a/src/Limelight.h
 +++ b/src/Limelight.h
 @@ -100,6 +100,10 @@ typedef struct _STREAM_CONFIGURATION {
@@ -93,7 +93,7 @@ index 22bee46..2f2c1c7 100644
  
  // If set in the renderer capabilities field, this flag will cause audio/video data to
  // be submitted directly from the receive thread. This should only be specified if the
-@@ -513,13 +556,18 @@ void LiInitializeConnectionCallbacks(PCONNECTION_LISTENER_CALLBACKS clCallbacks)
+@@ -517,13 +560,18 @@ void LiInitializeConnectionCallbacks(PCONNECTION_LISTENER_CALLBACKS clCallbacks)
  #define SCM_HEVC_REXT10_444 0x00100000 // Sunshine extension
  #define SCM_AV1_HIGH8_444   0x00200000 // Sunshine extension
  #define SCM_AV1_HIGH10_444  0x00400000 // Sunshine extension
@@ -117,7 +117,7 @@ index 22bee46..2f2c1c7 100644
  
  typedef struct _SERVER_INFORMATION {
      // Server host name or IP address in text form
-@@ -859,6 +907,15 @@ uint64_t LiGetMicroseconds(void);
+@@ -863,6 +911,15 @@ uint64_t LiGetMicroseconds(void);
  // It should only ever be compared with the return value from a previous call to itself.
  uint64_t LiGetMillis(void);
  
@@ -133,7 +133,7 @@ index 22bee46..2f2c1c7 100644
  // This is a simplistic STUN function that can assist clients in getting the WAN address
  // for machines they find using mDNS over IPv4. This can be used to pre-populate the external
  // address for streaming after GFE stopped sending it a while back. wanAddr is returned in
-@@ -1006,6 +1063,14 @@ typedef struct _SS_HDR_METADATA {
+@@ -1007,6 +1064,14 @@ typedef struct _SS_HDR_METADATA {
  // function when HDR mode is active on the host. This is a Sunshine protocol extension.
  bool LiGetHdrMetadata(PSS_HDR_METADATA metadata);
  
@@ -149,10 +149,10 @@ index 22bee46..2f2c1c7 100644
  // processing frames asynchronously may need to reset their decoder state even after returning DR_OK for
  // the prior frame. Rather than wait for a new frame and return DR_NEED_IDR for that one, they can just
 diff --git a/src/PlatformSockets.c b/src/PlatformSockets.c
-index cec96f3..6a5e3ee 100644
+index 25236a1..0217e6d 100644
 --- a/src/PlatformSockets.c
 +++ b/src/PlatformSockets.c
-@@ -231,6 +231,68 @@ int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
+@@ -236,6 +236,68 @@ int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect,
      return err;
  }
  
@@ -222,13 +222,13 @@ index cec96f3..6a5e3ee 100644
  #if defined(LC_WINDOWS) && !defined(NXDK)
      closesocket(s);
 diff --git a/src/PlatformSockets.h b/src/PlatformSockets.h
-index 4bac8bd..892e431 100644
+index 38e2061..623f133 100644
 --- a/src/PlatformSockets.h
 +++ b/src/PlatformSockets.h
-@@ -129,6 +129,9 @@ SOCKET bindUdpSocket(int addressFamily, struct sockaddr_storage* localAddr, SOCK
- int enableNoDelay(SOCKET s);
+@@ -130,6 +130,9 @@ int enableNoDelay(SOCKET s);
  int setSocketNonBlocking(SOCKET s, bool enabled);
- int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect);
+ int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect,
+                   struct sockaddr_storage* remoteAddr, SOCKADDR_LEN* addrLen);
 +// Requires a nonblocking socket. Read queued data before waiting; zero means
 +// the socket stayed empty through the requested wait, not a zero-byte packet.
 +int recvUdpSocketWithTimeout(SOCKET s, char* buffer, int size, int timeoutMs);
@@ -236,7 +236,7 @@ index 4bac8bd..892e431 100644
  int setNonFatalRecvTimeoutMs(SOCKET s, int timeoutMs);
  void closeSocket(SOCKET s);
 diff --git a/src/RtpVideoQueue.c b/src/RtpVideoQueue.c
-index a4e022e..8172191 100644
+index 5133a65..3fb0a62 100644
 --- a/src/RtpVideoQueue.c
 +++ b/src/RtpVideoQueue.c
 @@ -17,6 +17,23 @@
@@ -615,10 +615,10 @@ index a4e022e..8172191 100644
              stageCompleteFecBlock(queue);
  
 diff --git a/src/RtpVideoQueue.h b/src/RtpVideoQueue.h
-index c9bce6f..0d0b106 100644
+index 6e12b3c..5c0bcc6 100644
 --- a/src/RtpVideoQueue.h
 +++ b/src/RtpVideoQueue.h
-@@ -11,6 +11,8 @@ typedef struct _RTPV_QUEUE_ENTRY {
+@@ -13,6 +13,8 @@ typedef struct _RTPV_QUEUE_ENTRY {
      uint32_t rtpTimestamp;
      int length;
      bool isParity;
@@ -627,7 +627,7 @@ index c9bce6f..0d0b106 100644
  } RTPV_QUEUE_ENTRY, *PRTPV_QUEUE_ENTRY;
  
  typedef struct _RTPV_QUEUE_LIST {
-@@ -24,6 +26,14 @@ typedef struct _RTP_VIDEO_QUEUE {
+@@ -36,6 +38,14 @@ typedef struct _RTP_VIDEO_QUEUE {
      RTPV_QUEUE_LIST completedFecBlockList;
  
      uint64_t bufferFirstRecvTimeUs;
@@ -642,7 +642,7 @@ index c9bce6f..0d0b106 100644
      uint32_t bufferLowestSequenceNumber;
      uint32_t bufferHighestSequenceNumber;
      uint32_t bufferFirstParitySequenceNumber;
-@@ -57,4 +67,10 @@ void RtpvInitializeQueue(PRTP_VIDEO_QUEUE queue);
+@@ -69,5 +79,11 @@ void RtpvInitializeQueue(PRTP_VIDEO_QUEUE queue);
  void RtpvCleanupQueue(PRTP_VIDEO_QUEUE queue);
  int RtpvAddPacket(PRTP_VIDEO_QUEUE queue, PRTP_PACKET packet, int length, PRTPV_QUEUE_ENTRY packetEntry);
  uint32_t RtpvGetCurrentFrameNumber(PRTP_VIDEO_QUEUE queue);
@@ -653,8 +653,9 @@ index c9bce6f..0d0b106 100644
 +// Call only after draining the receive socket, on the receive thread.
 +bool RtpvExpirePendingFrame(PRTP_VIDEO_QUEUE queue, uint64_t nowUs);
  void RtpvSubmitQueuedPackets(PRTP_VIDEO_QUEUE queue);
+ void RtpvGetStats(PRTP_VIDEO_QUEUE queue, PRTP_VIDEO_STATS stats);
 diff --git a/src/RtspConnection.c b/src/RtspConnection.c
-index e958101..af28252 100644
+index 33b1d43..8b32efb 100644
 --- a/src/RtspConnection.c
 +++ b/src/RtspConnection.c
 @@ -20,6 +20,9 @@ static PPLT_CRYPTO_CONTEXT encryptionCtx;
@@ -701,7 +702,7 @@ index e958101..af28252 100644
  bool parseSdpAttributeToUInt(const char* payload, const char* name, uint32_t* val) {
      // Find the entry for the specified attribute name
      char* attribute = strstr(payload, name);
-@@ -1087,7 +1117,41 @@ int performRtspHandshake(PSERVER_INFORMATION serverInfo) {
+@@ -1088,7 +1118,41 @@ int performRtspHandshake(PSERVER_INFORMATION serverInfo) {
              goto Exit;
          }
  
@@ -745,10 +746,10 @@ index e958101..af28252 100644
                  NegotiatedVideoFormat = VIDEO_FORMAT_AV1_HIGH10_444;
              }
 diff --git a/src/SdpGenerator.c b/src/SdpGenerator.c
-index 22467c0..f9ec002 100644
+index 5ea5cbb..7a39244 100644
 --- a/src/SdpGenerator.c
 +++ b/src/SdpGenerator.c
-@@ -431,7 +431,26 @@ static PSDP_OPTION getAttributesList(char*urlSafeAddr) {
+@@ -438,7 +438,26 @@ static PSDP_OPTION getAttributesList(char*urlSafeAddr) {
          snprintf(payloadStr, sizeof(payloadStr), "%d", slicesPerFrame);
          err |= addAttributeString(&optionHead, "x-nv-video[0].videoEncoderSlicesPerFrame", payloadStr);
  
@@ -790,26 +791,26 @@ index 737d23c..71175e7 100644
  typedef struct _NV_VIDEO_PACKET {
      uint32_t streamPacketIndex;
 diff --git a/src/VideoDepacketizer.c b/src/VideoDepacketizer.c
-index 5baa1d5..d36539b 100644
+index 69ec1db..676a68a 100644
 --- a/src/VideoDepacketizer.c
 +++ b/src/VideoDepacketizer.c
-@@ -24,6 +24,7 @@ static uint64_t firstPacketPresentationTime;
- static uint32_t firstPacketRtpTimestamp;
+@@ -50,6 +50,7 @@ static uint32_t firstPacketRtpTimestamp;
  static bool dropStatePending;
- static bool idrFrameProcessed;
+ static atomic_bool idrFrameProcessed;
+ static PLT_MUTEX stateLock;
 +static uint16_t pyrowaveCriticalPackets;
  
  #define DR_CLEANUP -1000
  
-@@ -77,6 +78,7 @@ void initializeVideoDepacketizer(int pktSize) {
-     lastPacketPayloadLength = 0;
+@@ -105,6 +106,7 @@ void initializeVideoDepacketizer(int pktSize) {
      dropStatePending = false;
-     idrFrameProcessed = false;
+     consecutiveFrameDrops = 0;
+     atomic_store_explicit(&idrFrameProcessed, false, memory_order_relaxed);
 +    pyrowaveCriticalPackets = 0;
      strictIdrFrameWait = !isReferenceFrameInvalidationEnabled();
  }
  
-@@ -219,6 +221,11 @@ void validateDecodeUnitForPlayback(PDECODE_UNIT decodeUnit) {
+@@ -252,6 +254,11 @@ void validateDecodeUnitForPlayback(PDECODE_UNIT decodeUnit) {
              // We don't parse the AV1 bitstream
              LC_ASSERT_VT(decodeUnit->bufferList->bufferType == BUFFER_TYPE_PICDATA);
          }
@@ -821,7 +822,7 @@ index 5baa1d5..d36539b 100644
          else {
              LC_ASSERT(false);
          }
-@@ -490,6 +497,7 @@ static void reassembleFrame(int frameNumber, bool frameIsLTR) {
+@@ -509,6 +516,7 @@ static void reassembleFrame(int frameNumber, bool frameIsLTR) {
              qdu->decodeUnit.presentationTimeUs = firstPacketPresentationTime;
              qdu->decodeUnit.rtpTimestamp = firstPacketRtpTimestamp;
              qdu->decodeUnit.enqueueTimeUs = PltGetMicroseconds();
@@ -829,16 +830,16 @@ index 5baa1d5..d36539b 100644
  
              // These might be wrong for a few frames during a transition between SDR and HDR,
              // but the effects shouldn't very noticable since that's an infrequent operation.
-@@ -603,7 +611,7 @@ static int getBufferFlags(char* data, int length) {
+@@ -648,7 +656,7 @@ static int getBufferFlags(char* data, int length) {
  
  // As an optimization, we can cast the existing packet buffer to a PLENTRY and avoid
  // a malloc() and a memcpy() of the packet data.
--static void queueFragment(PLENTRY_INTERNAL* existingEntry, char* data, int offset, int length) {
-+static void queueFragment(PLENTRY_INTERNAL* existingEntry, char* data, int offset, int length, bool lost, bool recordStart) {
+-static bool queueFragment(PLENTRY_INTERNAL* existingEntry, char* data, int offset, int length) {
++static bool queueFragment(PLENTRY_INTERNAL* existingEntry, char* data, int offset, int length, bool lost, bool recordStart) {
      PLENTRY_INTERNAL entry;
  
-     if (existingEntry == NULL || *existingEntry == NULL) {
-@@ -635,7 +643,9 @@ static void queueFragment(PLENTRY_INTERNAL* existingEntry, char* data, int offse
+     // Check before allocating or adding to the signed decode-unit length.
+@@ -692,7 +700,9 @@ static bool queueFragment(PLENTRY_INTERNAL* existingEntry, char* data, int offse
              *existingEntry = NULL;
          }
  
@@ -848,29 +849,29 @@ index 5baa1d5..d36539b 100644
 +                                  getBufferFlags(entry->entry.data, entry->entry.length);
  
          nalChainDataLength += entry->entry.length;
- 
-@@ -709,7 +719,7 @@ static void processAvcHevcRtpPayloadSlow(PBUFFER_DESC currentPos, PLENTRY_INTERN
+         nalChainFragmentCount++;
+@@ -770,7 +780,7 @@ static bool processAvcHevcRtpPayloadSlow(PBUFFER_DESC currentPos, PLENTRY_INTERN
          // To minimize copies, we'll allocate for SPS, PPS, and VPS to allow
          // us to reuse the packet buffer for the picture data in the I-frame.
-         queueFragment(containsPicData ? existingEntry : NULL,
--                      currentPos->data, start, currentPos->offset - start);
-+                      currentPos->data, start, currentPos->offset - start, false, false);
+         if (!queueFragment(containsPicData ? existingEntry : NULL,
+-                           currentPos->data, start, currentPos->offset - start)) {
++                           currentPos->data, start, currentPos->offset - start, false, false)) {
+             return false;
+         }
      }
- }
+@@ -827,9 +837,10 @@ static void discardCorruptFrame(uint32_t frameIndex) {
  
-@@ -743,9 +753,10 @@ static bool isFirstPacket(uint8_t flags, uint8_t fecBlockNumber) {
- 
- // Process an RTP Payload
- // The caller will free *existingEntry unless we NULL it
+ // Process an RTP Payload with stateLock held.
+ // The caller will free *existingEntry unless we NULL it.
 +// A lost payload is a zero-filled stand-in from the RtpVideoQueue (PyroWave only)
- static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
-                        uint64_t receiveTimeUs, uint64_t presentationTimeUs, uint32_t rtpTimestamp,
--                       PLENTRY_INTERNAL* existingEntry) {
-+                       bool lost, PLENTRY_INTERNAL* existingEntry) {
+ static void processRtpPayloadLocked(PNV_VIDEO_PACKET videoPacket, int length,
+                              uint64_t receiveTimeUs, uint64_t presentationTimeUs, uint32_t rtpTimestamp,
+-                             PLENTRY_INTERNAL* existingEntry) {
++                             bool lost, PLENTRY_INTERNAL* existingEntry) {
      BUFFER_DESC currentPos;
      uint32_t frameIndex;
      uint8_t flags;
-@@ -912,6 +923,16 @@ static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
+@@ -999,6 +1010,16 @@ static void processRtpPayloadLocked(PNV_VIDEO_PACKET videoPacket, int length,
              BbGet16(&bb, &lastPacketPayloadLength);
          }
  
@@ -887,27 +888,40 @@ index 5baa1d5..d36539b 100644
          if (APP_VERSION_AT_LEAST(7, 1, 450)) {
              // >= 7.1.450 uses 2 different header lengths based on the first byte:
              // 0x01 indicates an 8 byte header
-@@ -1022,7 +1043,7 @@ static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
+@@ -1111,7 +1132,7 @@ static void processRtpPayloadLocked(PNV_VIDEO_PACKET videoPacket, int length,
              }
  #endif
  
--            queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length);
-+            queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length, false, false);
+-            if (!queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length)) {
++            if (!queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length, false, false)) {
+                 goto corruptFrame;
+             }
          }
-     }
-     else {
-@@ -1066,7 +1087,9 @@ static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
+@@ -1157,7 +1178,9 @@ static void processRtpPayloadLocked(PNV_VIDEO_PACKET videoPacket, int length,
          }
  
          // Other codecs are just passed through as is.
--        queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length);
-+        queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length, lost,
-+                      (NegotiatedVideoFormat & VIDEO_FORMAT_MASK_PYROWAVE) &&
-+                          (extraFlags & NV_VIDEO_PACKET_EXTRA_FLAG_PYROWAVE_RECORD_START));
+-        if (!queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length)) {
++        if (!queueFragment(existingEntry, currentPos.data, currentPos.offset, currentPos.length, lost,
++                           (NegotiatedVideoFormat & VIDEO_FORMAT_MASK_PYROWAVE) &&
++                               (extraFlags & NV_VIDEO_PACKET_EXTRA_FLAG_PYROWAVE_RECORD_START))) {
+             goto corruptFrame;
+         }
      }
+@@ -1227,10 +1250,10 @@ corruptFrame:
+ // The caller will free *existingEntry unless we NULL it
+ static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
+                        uint64_t receiveTimeUs, uint64_t presentationTimeUs, uint32_t rtpTimestamp,
+-                       PLENTRY_INTERNAL* existingEntry) {
++                       bool lost, PLENTRY_INTERNAL* existingEntry) {
+     PltLockMutex(&stateLock);
+     processRtpPayloadLocked(videoPacket, length, receiveTimeUs, presentationTimeUs,
+-                            rtpTimestamp, existingEntry);
++                            rtpTimestamp, lost, existingEntry);
+     PltUnlockMutex(&stateLock);
+ }
  
-     if (lastPacket) {
-@@ -1184,6 +1207,7 @@ void queueRtpPacket(PRTPV_QUEUE_ENTRY queueEntryPtr) {
+@@ -1296,6 +1319,7 @@ void queueRtpPacket(PRTPV_QUEUE_ENTRY queueEntryPtr) {
                        queueEntry.receiveTimeUs,
                        queueEntry.presentationTimeUs,
                        queueEntry.rtpTimestamp,
@@ -916,7 +930,7 @@ index 5baa1d5..d36539b 100644
  
      if (existingEntry != NULL) {
 diff --git a/src/VideoStream.c b/src/VideoStream.c
-index 402b056..1a8268f 100644
+index a751005..b2dcd18 100644
 --- a/src/VideoStream.c
 +++ b/src/VideoStream.c
 @@ -34,6 +34,10 @@ static bool receivedFullFrame;
@@ -952,14 +966,16 @@ index 402b056..1a8268f 100644
          // SO_RCVTIMEO failed, so use select() to wait
          useSelect = true;
      }
-@@ -134,16 +144,44 @@ static void VideoReceiveThreadProc(void* context) {
+@@ -134,18 +144,46 @@ static void VideoReceiveThreadProc(void* context) {
              }
          }
  
 -        err = recvUdpSocket(rtpSocket,
 -                            encrypted ? encryptedBuffer : buffer,
 -                            receiveSize,
--                            useSelect);
+-                            useSelect,
+-                            NULL,
+-                            NULL);
 +        if (usePartialFrameTimeout) {
 +            int timeoutMs = UDP_RECV_POLL_TIMEOUT_MS;
 +            uint64_t deadlineUs = RtpvGetPendingFrameDeadlineUs(&rtpQueue);
@@ -987,7 +1003,9 @@ index 402b056..1a8268f 100644
 +            err = recvUdpSocket(rtpSocket,
 +                                encrypted ? encryptedBuffer : buffer,
 +                                receiveSize,
-+                                useSelect);
++                                useSelect,
++                                NULL,
++                                NULL);
 +        }
          if (err < 0) {
              Limelog("Video Receive: recvUdpSocket() failed: %d\n", (int)LastSocketError());
@@ -998,10 +1016,10 @@ index 402b056..1a8268f 100644
 +            if (usePartialFrameTimeout) {
 +                RtpvExpirePendingFrame(&rtpQueue, PltGetMicroseconds());
 +            }
-             if (!receivedDataFromPeer) {
+             if (!atomic_load_explicit(&receivedDataFromPeer, memory_order_relaxed)) {
                  // If we wait many seconds without ever receiving a video packet,
                  // assume something is broken and terminate the connection.
-@@ -328,14 +366,35 @@ int startVideoStream(void* rendererContext, int drFlags) {
+@@ -330,14 +368,35 @@ int startVideoStream(void* rendererContext, int drFlags) {
          return err;
      }
  

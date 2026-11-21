@@ -180,6 +180,6 @@ app's `licenses/` folder when it is built.
 - PS5 build/link integration: Mihawk-99/PS5_Vulkan, GPL-3.0-or-later.
 - PayloadSDK platform fork: Mihawk-99/PS5_PayloadSDK, GPL-3.0-or-later; its platform layer includes Doug Lea's dlmalloc (public domain).
 - PyroWave framing parser: derived from Nonary/moonlight-qt revision 5f9ce4a46d2b8fd2191f47cef043bc43f3d772d0, GPL-3.0-or-later. Original parser retained, with provenance headers; no Windows/D3D interop copied.
-- moonlight-common-c: the original upstream submodule pin f900dd4767759c7b9d0e93bcea666b55c69ea62f is retained with a minimal protocol patch derived from Nonary revisions 927eba9639f3c9b5037ab45fc0d6486e2a19b39f and 3bbe8e818b42a8a1dc3a1381149b7e818fbd33fd, preserving its LICENSE.txt. No second transport implementation.
+- moonlight-common-c: the upstream submodule pin 94c65fd364d17b223f00a8763c9a5d94a66cb8dd is retained with a minimal protocol patch derived from Nonary revisions 927eba9639f3c9b5037ab45fc0d6486e2a19b39f and 3bbe8e818b42a8a1dc3a1381149b7e818fbd33fd, preserving its LICENSE.txt. No second transport implementation.
 
 The decoder/context/renderer are adapted from the preceding MIT-licensed PS5 PyroWave PoC. Source license headers are preserved. Dependency pins and local patches are documented in docs/PYROWAVE.md and tools/pyrowave/. Build caches and binaries are not source deliverables.
